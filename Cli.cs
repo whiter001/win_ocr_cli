@@ -469,7 +469,7 @@ namespace WinOcrCli
 
     public static class CliPrinter
     {
-        public const string Version = "win_ocr_cli 1.0.0";
+        public const string Version = "win_ocr_cli 1.0.1";
 
         public static string Usage
         {
