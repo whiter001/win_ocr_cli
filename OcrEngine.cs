@@ -1,7 +1,7 @@
 // OcrEngine.cs
 // 调用 Windows.Media.Ocr (WinRT) 做文字识别。
 //
-// 用 .NET Framework 4.0 自带的 System.Runtime.WindowsRuntime.dll 拿到 WinRT 投影。
+// 用 .NET Framework 4.5 自带的 System.Runtime.WindowsRuntime.dll 拿到 WinRT 投影。
 // 数据流(对每张图片):
 //   System.Drawing.Bitmap  → PNG bytes  →  InMemoryRandomAccessStream
 //       → BitmapDecoder.CreateAsync      →  SoftwareBitmap
@@ -99,28 +99,32 @@ namespace WinOcrCli
             }
 
             // 2. 写进 InMemoryRandomAccessStream
-            InMemoryRandomAccessStream stream = new InMemoryRandomAccessStream();
-            DataWriter writer = new DataWriter(stream);
-            try
+            using (InMemoryRandomAccessStream stream = new InMemoryRandomAccessStream())
             {
-                writer.WriteBytes(png);
-                // StoreAsync 把 writer 内部 buffer 提交到流,完成后才能 DetachStream
-                writer.StoreAsync().AsTask().Wait();
-            }
-            finally
-            {
-                writer.DetachStream();
-                writer.Dispose();
-            }
+                DataWriter writer = new DataWriter(stream);
+                try
+                {
+                    writer.WriteBytes(png);
+                    // StoreAsync 把 writer 内部 buffer 提交到流,完成后才能 DetachStream
+                    writer.StoreAsync().AsTask().Wait();
+                }
+                finally
+                {
+                    writer.DetachStream();
+                    writer.Dispose();
+                }
 
-            // 3. 流 seek 到头(Read 之前必须)
-            stream.Seek(0);
+                // 3. 流 seek 到头(Read 之前必须)
+                stream.Seek(0);
 
-            // 4. BitmapDecoder.CreateAsync(stream) -> SoftwareBitmap
-            //    让 decoder 自动判断格式;Windows OCR 引擎支持 Bgra8 / Rgba8 / Gray8 / Nv12 / Yuy2。
-            BitmapDecoder decoder = BitmapDecoder.CreateAsync(stream).AsTask().Result;
-            SoftwareBitmap softwareBitmap = decoder.GetSoftwareBitmapAsync().AsTask().Result;
-            return softwareBitmap;
+                // 4. BitmapDecoder.CreateAsync(stream) -> SoftwareBitmap
+                //    让 decoder 自动判断格式;Windows OCR 引擎支持 Bgra8 / Rgba8 / Gray8 / Nv12 / Yuy2。
+                //    注:BitmapDecoder 的 .NET 4.5 投影未实现 IDisposable(CS1674/CS0039),
+                //    无法显式释放;它是 RCW,无引用后由 GC 终结时释放底层 COM 对象。
+                BitmapDecoder decoder = BitmapDecoder.CreateAsync(stream).AsTask().Result;
+                // SoftwareBitmap 自带像素缓冲,decoder/stream 之后释放仍有效
+                return decoder.GetSoftwareBitmapAsync().AsTask().Result;
+            }
         }
 
         // ----- OcrResult 提取 -----

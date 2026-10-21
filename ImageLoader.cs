@@ -1,6 +1,6 @@
 // ImageLoader.cs
 // 用 System.Drawing (GDI+) 加载图片为 Bitmap。
-// .NET 4.0 自带 Image.FromFile,支持 PNG/JPEG/BMP/GIF/TIFF。
+// .NET Framework 自带 Image.FromFile,支持 PNG/JPEG/BMP/GIF/TIFF。
 // HEIC/WebP 在 GDI+ 中不受支持,会抛 NotSupportedException,被外层转为错误信息。
 
 using System;
@@ -48,17 +48,6 @@ namespace WinOcrCli
             catch (ExternalException ex)
             {
                 throw new ImageLoaderException("GDI+ 错误: " + ex.Message);
-            }
-        }
-
-        /// <summary>把 Bitmap 保存为 PNG 字节数组(用于剪贴板)。</summary>
-        public static byte[] ToPngBytes(Bitmap bmp)
-        {
-            if (bmp == null) throw new ArgumentNullException("bmp");
-            using (var ms = new MemoryStream())
-            {
-                bmp.Save(ms, ImageFormat.Png);
-                return ms.ToArray();
             }
         }
 

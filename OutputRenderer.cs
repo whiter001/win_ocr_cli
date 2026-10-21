@@ -1,6 +1,6 @@
 // OutputRenderer.cs
 // 输出渲染:文本 / JSON 两种格式。
-// .NET 4.0 没有 System.Text.Json,这里实现一个轻量的手写 JSON 序列化器,
+// .NET 4.5 没有 System.Text.Json,这里实现一个轻量的手写 JSON 序列化器,
 // 足以覆盖我们的结构(OcrReport / OcrBatchReport / WindowInfo)。
 //
 // 文本格式与 macOS 版本保持一致(中文说明、对齐、归一化 box)。
@@ -258,6 +258,17 @@ namespace WinOcrCli
             return jw.ToString();
         }
 
+        public static string RenderInstallSkillJson(string path)
+        {
+            var w = new JsonWriter();
+            w.BeginObject();
+            w.Key("installed"); w.Bool(true);
+            w.Key("skill"); w.String(SkillInstaller.SkillDirName);
+            w.Key("path"); w.String(path);
+            w.EndObject();
+            return w.ToString();
+        }
+
         private static void WriteBoundingBox(JsonWriter w, OcrBoundingBox b)
         {
             w.BeginObject();
@@ -270,7 +281,7 @@ namespace WinOcrCli
     }
 
     /// <summary>
-    /// 轻量 pretty-printed JSON 写入器。
+    /// 轻量 pretty-printed JSON 写入器(2 空格缩进)。
     /// 调用顺序必须形如 BeginObject → Key → value → ... → EndObject,数组同理。
     /// </summary>
     public sealed class JsonWriter
@@ -292,7 +303,6 @@ namespace WinOcrCli
             _firstInContainer.Push(true);
             _indent++;
             _expectingValue = false;
-            NewLineIndent();
         }
 
         public void EndObject()
@@ -315,7 +325,6 @@ namespace WinOcrCli
             _firstInContainer.Push(true);
             _indent++;
             _expectingValue = false;
-            NewLineIndent();
         }
 
         public void EndArray()
@@ -334,19 +343,7 @@ namespace WinOcrCli
         {
             if (_stack.Count == 0 || _stack.Peek() != ContainerKind.Object)
                 throw new InvalidOperationException("Key() only valid inside object");
-            bool first = _firstInContainer.Peek();
-            if (first)
-            {
-                _firstInContainer.Pop();
-                _firstInContainer.Push(false);
-            }
-            else
-            {
-                _sb.Append(',');
-                NewLineIndent();
-            }
-            // 回到对象缩进
-            for (int i = 0; i < _indent - 1; i++) _sb.Append("  ");
+            ElementPrefix();
             WriteString(k);
             _sb.Append(": ");
             _expectingValue = true;
@@ -389,25 +386,9 @@ namespace WinOcrCli
 
         public override string ToString() { return _sb.ToString(); }
 
-        /// <summary>在 BeginObject/BeginArray 之前处理逗号与缩进(在 array/object 内部)。</summary>
-        private void PrefixElement()
+        /// <summary>对象键 / 数组元素的公共前缀:首个元素直接换行缩进,其余先补逗号。</summary>
+        private void ElementPrefix()
         {
-            if (_stack.Count == 0)
-            {
-                // 顶层,无需前缀
-                return;
-            }
-            // 在 object 里,只有「刚调用了 Key」之后才能开始新对象/数组作为 value
-            if (_stack.Peek() == ContainerKind.Object)
-            {
-                if (!_expectingValue)
-                {
-                    throw new InvalidOperationException("Value() in non-array container; use Key() first");
-                }
-                // Key 已经写了 "key: ",不再加前缀
-                return;
-            }
-            // array 元素
             bool first = _firstInContainer.Peek();
             if (first)
             {
@@ -417,9 +398,22 @@ namespace WinOcrCli
             else
             {
                 _sb.Append(',');
-                NewLineIndent();
-                for (int i = 0; i < _indent - 1; i++) _sb.Append("  ");
             }
+            NewLineIndent();
+        }
+
+        /// <summary>在 BeginObject/BeginArray 之前处理逗号与缩进(在 array/object 内部)。</summary>
+        private void PrefixElement()
+        {
+            if (_stack.Count == 0) return;  // 顶层,无需前缀
+            // 在 object 里,只有「刚调用了 Key」之后才能开始新对象/数组作为 value
+            if (_stack.Peek() == ContainerKind.Object)
+            {
+                if (!_expectingValue)
+                    throw new InvalidOperationException("Value() in non-array container; use Key() first");
+                return;  // Key 已经写了 "key: ",不再加前缀
+            }
+            ElementPrefix();  // array 元素
         }
 
         /// <summary>写入 Value 之前的前缀处理:对象里跟在 Key 后,数组里是元素前缀。</summary>
@@ -433,27 +427,14 @@ namespace WinOcrCli
             }
             if (_stack.Count == 0) return;  // 顶层
             if (_stack.Peek() == ContainerKind.Object)
-            {
                 throw new InvalidOperationException("Value() in object container; use Key() first");
-            }
-            // array 元素
-            bool first = _firstInContainer.Peek();
-            if (first)
-            {
-                _firstInContainer.Pop();
-                _firstInContainer.Push(false);
-            }
-            else
-            {
-                _sb.Append(',');
-                NewLineIndent();
-                for (int i = 0; i < _indent - 1; i++) _sb.Append("  ");
-            }
+            ElementPrefix();  // array 元素
         }
 
         private void NewLineIndent()
         {
             _sb.Append('\n');
+            for (int i = 0; i < _indent; i++) _sb.Append("  ");
         }
 
         private void WriteString(string s)

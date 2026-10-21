@@ -2,7 +2,7 @@
 // 剪贴板支持 —— 读取 / 写入图片。
 // 用 System.Windows.Forms.Clipboard。
 //
-// 注意:在 .NET 4.0 里 Clipboard.GetImage() 要求 STA 线程。
+// 注意:Clipboard.GetImage() 要求 STA 线程。
 
 using System;
 using System.Drawing;

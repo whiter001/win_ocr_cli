@@ -1,6 +1,6 @@
 @echo off
 REM build.cmd - 编译 win_ocr_cli
-REM 使用 .NET Framework 4.0 自带的 csc.exe (C# 5)
+REM 使用 .NET Framework 4.5+ 自带的 csc.exe (C# 5)
 REM 输出: bin\win_ocr_cli.exe
 REM
 REM 需要的额外引用:
@@ -18,7 +18,7 @@ set WINRT=C:\PROGRA~2\Windows Kits\10\UnionMetadata\10.0.22621.0
 if not exist bin mkdir bin
 
 echo === Compiling win_ocr_cli ===
-%CSC% /nologo /target:winexe /platform:anycpu /out:%OUT% ^
+%CSC% /nologo /target:exe /platform:anycpu /out:%OUT% ^
     /reference:System.dll ^
     /reference:System.Core.dll ^
     /reference:System.Drawing.dll ^
@@ -27,7 +27,7 @@ echo === Compiling win_ocr_cli ===
     /reference:System.Runtime.WindowsRuntime.dll ^
     /reference:mscorlib.dll ^
     /reference:"%WINRT%\Windows.winmd" ^
-    OcrTypes.cs Cli.cs ImageLoader.cs OcrEngine.cs ScreenCapture.cs ClipboardHelper.cs OutputRenderer.cs Program.cs
+    OcrTypes.cs Cli.cs ImageLoader.cs OcrEngine.cs ScreenCapture.cs ClipboardHelper.cs OutputRenderer.cs SkillInstaller.cs Program.cs
 
 if %ERRORLEVEL% NEQ 0 (
     echo *** Build FAILED ***

@@ -1,6 +1,6 @@
 // OcrTypes.cs
 // 数据类型定义 — 对应 macOS 版本的 OCRBoundingBox / OCRTextLine / OCRReport / OCRBatchItem。
-// Windows 移植版,使用 .NET Framework 4.0 + C# 5。
+// Windows 移植版,使用 .NET Framework 4.5 + C# 5。
 
 using System;
 using System.Collections.Generic;
@@ -10,7 +10,7 @@ namespace WinOcrCli
 {
     /// <summary>
     /// 归一化边界框（坐标原点在图像**左下角**,Y 轴向上）,
-    /// 字段取值范围 [0, 1]。与 Windows.Media.Ocr.OcrLine 的 BoundingBox 行为一致。
+    /// 字段取值范围 [0, 1]。与 macOS 版输出一致(Windows OCR 原始坐标为左上原点 + 像素,已翻转归一化)。
     /// </summary>
     public struct OcrBoundingBox
     {

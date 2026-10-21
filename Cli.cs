@@ -45,11 +45,7 @@ namespace WinOcrCli
         public bool WindowList = false;                         // --window-list
         public CaptureSpec ClipboardCapture;                    // --clipboard(把截图写到剪贴板)
         public bool PasteboardSource = false;                   // --from-clipboard
-
-        public bool IsSingleImage
-        {
-            get { return ImagePaths.Count == 1; }
-        }
+        public bool InstallSkill = false;                       // --install-skill
     }
 
     /// <summary>截图规格(主屏/按窗口/按区域)。</summary>
@@ -99,6 +95,7 @@ namespace WinOcrCli
             bool windowListRequested = false;
             bool clipboardRequested = false;
             bool pasteboardRequested = false;
+            bool installSkillRequested = false;
             CaptureSpec captureSource = null;
 
             for (int i = 0; i < args.Length; i++)
@@ -249,6 +246,10 @@ namespace WinOcrCli
                         pasteboardRequested = true;
                         break;
 
+                    case "--install-skill":
+                        installSkillRequested = true;
+                        break;
+
                     default:
                         if (a == "-")
                         {
@@ -273,6 +274,19 @@ namespace WinOcrCli
 
             // ----- 模式互斥与组装 -----
 
+            if (installSkillRequested)
+            {
+                if (captureSource != null || saveScreenshotPath != null
+                    || windowListRequested || clipboardRequested || pasteboardRequested
+                    || imagePaths.Count > 0 || inputDirs.Count > 0)
+                {
+                    throw new CliException("--install-skill 必须单独使用,不能与其他输入或截图参数组合");
+                }
+                if (opts.OutputPath != null) opts.OutputMode = CliOutputMode.Json;
+                opts.InstallSkill = true;
+                return opts;
+            }
+
             if (windowListRequested)
             {
                 if (captureSource != null || saveScreenshotPath != null
@@ -283,10 +297,6 @@ namespace WinOcrCli
                 }
                 if (opts.OutputPath != null) opts.OutputMode = CliOutputMode.Json;
                 opts.WindowList = true;
-                if (saveScreenshotPath != null)
-                {
-                    // 忽略,--window-list 不支持 --save-screenshot
-                }
                 return opts;
             }
 
@@ -308,7 +318,9 @@ namespace WinOcrCli
                     throw new CliException("--from-clipboard 必须单独使用,不能与 --screen/--window/--region/--clipboard/--window-list 组合");
                 if (imagePaths.Count > 0 || inputDirs.Count > 0)
                     throw new CliException("--from-clipboard 不能与位置参数 / --dir / stdin `-` 同时使用");
-                if (opts.Keyword == null && opts.OutputPath != null) opts.OutputMode = CliOutputMode.Json;
+                if (opts.Keyword != null && opts.OutputPath != null)
+                    throw new CliException("--keyword 与 --output/-o 不能同时使用");
+                if (opts.OutputPath != null) opts.OutputMode = CliOutputMode.Json;
                 opts.PasteboardSource = true;
                 return opts;
             }
@@ -472,11 +484,12 @@ namespace WinOcrCli
                 sb.AppendLine("  find . -name \"*.png\" | win_ocr_cli - [选项]     # stdin");
                 sb.AppendLine("  win_ocr_cli --screen [选项]                      # 截主屏 + OCR");
                 sb.AppendLine("  win_ocr_cli --window <查询> [选项]               # 截匹配窗口");
-                sb.AppendLine("  win_ocr_cli --window-id <id> [选项]");
-                sb.AppendLine("  win_ocr_cli --region x y w h [选项]              # 截屏幕区域");
-                sb.AppendLine("  win_ocr_cli --clipboard [--screen|--window|--region]  # 截图到剪贴板");
+                sb.AppendLine("  win_ocr_cli --window-id <id> [选项]              # id 见 --window-list 输出");
+                sb.AppendLine("  win_ocr_cli --region x y w h [选项]              # 截屏幕区域(左上角原点,出屏自动裁剪)");
+                sb.AppendLine("  win_ocr_cli --clipboard [--screen|--window|--window-id|--region]  # 截图到剪贴板");
                 sb.AppendLine("  win_ocr_cli --from-clipboard [选项]              # 识别剪贴板里的图片");
-                sb.AppendLine("  win_ocr_cli --window-list                        # 列出可见窗口");
+                sb.AppendLine("  win_ocr_cli --window-list                        # 列出可见窗口(不能与其他输入同用)");
+                sb.AppendLine("  win_ocr_cli --install-skill                      # 安装全局 Agent Skill(必须单独使用)");
                 sb.AppendLine();
                 sb.AppendLine("输入源(仅可选其一,不可叠加):");
                 sb.AppendLine("  <位置参数>...          一张或多张图片路径");
@@ -491,10 +504,11 @@ namespace WinOcrCli
                 sb.AppendLine("                           (默认: zh-Hans,zh-Hant,en-US)");
                 sb.AppendLine("  --cjk                    切换到 CJK 预设 (zh-Hans,zh-Hant,zh-HK,en-US)");
                 sb.AppendLine("                           与 --lang 互斥");
-                sb.AppendLine("  --level <accurate|fast>  识别等级 (默认: accurate)");
-                sb.AppendLine("  --no-correction          关闭语言自动纠错");
-                sb.AppendLine("  -k, --keyword <kw>       在识别结果里搜索关键词(单文件模式)");
-                sb.AppendLine("  --save-screenshot <p>    把截图另存到 p(--clipboard 时也支持)");
+                sb.AppendLine("  --level <accurate|fast>  识别等级 (默认: accurate;Windows 版暂不支持,为兼容保留)");
+                sb.AppendLine("  --no-correction          关闭语言自动纠错 (Windows 版暂不支持,为兼容保留)");
+                sb.AppendLine("  -k, --keyword <kw>       在识别结果里搜索关键词(单文件 / --from-clipboard;");
+                sb.AppendLine("                           不能与 -o/--output 或截图模式同用)");
+                sb.AppendLine("  --save-screenshot <p>    把截图另存到 p(需配合截图模式;--clipboard 时也支持)");
                 sb.AppendLine("  -q, --quiet              抑制 stdout 报告和 stderr 进度;错误仍到 stderr");
                 sb.AppendLine("  --text                   以纯文本输出 (默认)");
                 sb.AppendLine("  --json                   以 JSON 输出");
@@ -510,6 +524,10 @@ namespace WinOcrCli
                 sb.AppendLine("    Get-WindowsCapability -Online | Where-Object Name -like 'Language.OCR*'");
                 sb.AppendLine("    Add-WindowsCapability -Online -Name \"Language.OCR~~~und-LANG~0.0.1.0\"");
                 sb.AppendLine("  默认语言跟随用户配置文件;--lang 仅在 OcrEngine 支持时生效。");
+                sb.AppendLine("  --install-skill 把 SKILL.md 写入 %USERPROFILE%\\.agents\\skills\\win-ocr-cli\\");
+                sb.AppendLine();
+                sb.AppendLine("退出码:");
+                sb.AppendLine("  0 成功   1 参数/运行错误   2 批量模式有失败项");
                 sb.AppendLine();
                 sb.AppendLine("示例:");
                 sb.AppendLine("  win_ocr_cli photo.png");

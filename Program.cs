@@ -7,14 +7,13 @@
 //   * 识别剪贴板图片(--from-clipboard)
 //   * 窗口列表(--window-list)
 //
-// C# 5 / .NET 4.0 限制:
+// C# 5 / .NET 4.5 限制:
 //   * 无字符串内插 → 用 string.Format
 //   * Clipboard / Screen 在 WinForms 命名空间 → 需 [STAThread]
-//   * 批量并发用 ThreadPool + ManualResetEvent 自己拼
+//   * 批量并发用 Task.Run + SemaphoreSlim
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Text;
@@ -31,6 +30,9 @@ namespace WinOcrCli
         [STAThread]
         public static int Main(string[] args)
         {
+            // stdout/stdin 统一 UTF-8(无 BOM),避免中文在管道或重定向下乱码
+            try { Console.OutputEncoding = new UTF8Encoding(false); } catch { }
+            try { Console.InputEncoding = new UTF8Encoding(false); } catch { }
             try
             {
                 var opts = CliParser.Parse(args, ReadStdin);
@@ -62,7 +64,8 @@ namespace WinOcrCli
 
         private static int Run(CliOptions opts)
         {
-            // 优先级:window-list > clipboard > pasteboard > capture > file
+            // 优先级:install-skill > window-list > clipboard > pasteboard > capture > file
+            if (opts.InstallSkill) return RunInstallSkill(opts);
             if (opts.WindowList) return RunWindowList(opts);
             if (opts.ClipboardCapture != null) return RunClipboardCapture(opts, opts.ClipboardCapture);
             if (opts.PasteboardSource) return RunPasteboardOcr(opts);
@@ -89,6 +92,26 @@ namespace WinOcrCli
             return 0;
         }
 
+        // ---------- 安装全局 Agent Skill ----------
+
+        private static int RunInstallSkill(CliOptions opts)
+        {
+            try
+            {
+                string path = SkillInstaller.Install();
+                string payload = (opts.OutputMode == CliOutputMode.Json)
+                    ? OutputRenderer.RenderInstallSkillJson(path)
+                    : "已安装全局 skill: " + path + "\n";
+                Emit(payload, opts.OutputPath, opts.Quiet);
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("错误: " + ex.Message);
+                return 1;
+            }
+        }
+
         // ---------- 截图到剪贴板 ----------
 
         private static int RunClipboardCapture(CliOptions opts, CaptureSpec cap)
@@ -97,6 +120,7 @@ namespace WinOcrCli
             {
                 if (bmp == null) return 1;
                 ClipboardHelper.WriteImage(bmp);
+                if (!string.IsNullOrEmpty(cap.SavePath)) ImageLoader.SavePng(bmp, cap.SavePath);
                 int w = bmp.Width, h = bmp.Height;
                 string payload;
                 if (opts.OutputMode == CliOutputMode.Json)
@@ -125,7 +149,7 @@ namespace WinOcrCli
             try
             {
                 var report = RecognizeOne(tmp, opts);
-                report.ImagePath = "<clipboard> (" + report.Lines.Count + " lines, " + tmp + ")";
+                report.ImagePath = "<clipboard>";
                 string payload = (opts.OutputMode == CliOutputMode.Json)
                     ? OutputRenderer.RenderJson(report)
                     : OutputRenderer.RenderText(report, opts);
@@ -284,14 +308,19 @@ namespace WinOcrCli
             return batch.FailureCount > 0 ? 2 : 0;
         }
 
+        private static int _lastProgressLen = 0;
+
         private static void ProgressLine(int done, int total, OcrBatchItem item)
         {
             string name = Path.GetFileName(item.ImagePath);
             string status = item.Status == "ok"
                 ? string.Format("ok ({0} lines)", item.Lines != null ? item.Lines.Count : 0)
                 : "FAILED: " + (item.ErrorMessage ?? "?");
-            string prefix = total >= 10 && done < 10 ? " " : "";
-            Console.Error.Write("\r[" + done + "/" + total + "] " + prefix + name + "  " + status);
+            string text = string.Format("[{0}/{1}] {2}  {3}", done, total, name, status);
+            // 补齐到上次的行宽,清除 \r 覆盖时长文件名留下的残尾
+            int pad = Interlocked.Exchange(ref _lastProgressLen, text.Length) - text.Length;
+            if (pad > 0) text += new string(' ', pad);
+            Console.Error.Write("\r" + text);
             if (done == total) Console.Error.WriteLine();
         }
 

@@ -2,7 +2,7 @@
 
 基于 [Windows.Media.Ocr](https://learn.microsoft.com/en-us/uwp/api/windows.media.ocr) (WinRT) 的 Windows 命令行 OCR 工具。
 [mac_ocr_cli](https://github.com/whiter001/mac_ocr_cli) 的 Windows 移植版,使用
-`C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe` (C# 5 / .NET Framework 4.0) 编译。
+`C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe` (C# 5 / .NET Framework 4.5+) 编译。
 
 零运行时依赖 —— 链接到系统内置的 Windows Runtime,产物为单文件 45 KB exe。
 
@@ -17,11 +17,12 @@
 - **批量**:多张图片、目录递归扫描、stdin 路径列表,并发处理,单张失败不影响其他
 - **屏幕截图**:截主屏幕、按窗口标题/ID 截、截屏幕区域;另含 `--window-list` 列出可见窗口
 - **剪贴板**:截图到剪贴板(`--clipboard`)、识别剪贴板里的图片(`--from-clipboard`)
+- **Agent Skill**:`--install-skill` 把 SKILL.md 安装到全局 skills 目录(`%USERPROFILE%\.agents\skills\win-ocr-cli\`)
 - **进度** + **`--quiet`**:批量模式默认在 stderr 打印每张完成进度,`--quiet` 抑制所有非错误输出
 
 ## 编译
 
-需要 **Windows 10 或更高版本** + **.NET Framework 4.0+**(已自带在 Win 10/11)。
+需要 **Windows 10 或更高版本** + **.NET Framework 4.5+**(已自带在 Win 10/11)。
 还需本机已安装 **Windows SDK 10.0.22621.0** 的合并 WinMD(`Windows.winmd`)。
 
 直接运行 `build.cmd`:
@@ -32,7 +33,7 @@ build.cmd
 
 输出 `bin\win_ocr_cli.exe`(单文件 45 KB)。
 
-如果 SDK 路径不同,修改 `build.cmd` 里的 `WIN10` 变量;找不到 SDK 时,可以从
+如果 SDK 路径不同,修改 `build.cmd` 里的 `WINRT` 变量;找不到 SDK 时,可以从
 `C:\Windows\System32\WinMetadata\` 下分别引用 `Windows.Foundation.winmd` /
 `Windows.Media.winmd` / `Windows.Graphics.winmd` / `Windows.Globalization.winmd` /
 `Windows.Storage.winmd` 代替合并的 `Windows.winmd`,但合并 WinMD 更简单。
@@ -128,13 +129,16 @@ win_ocr_cli --clipboard --window "Chrome"
 # 识别剪贴板里的图片(系统截图快捷键 Win+Shift+S 截到剪贴板)
 win_ocr_cli --from-clipboard
 win_ocr_cli --from-clipboard -k "订单号"
+
+# 安装全局 Agent Skill(让 AI Agent 自动发现本工具的用法)
+win_ocr_cli --install-skill
 ```
 
 ## 进度与静默
 
 - **默认**:批量模式每张图完成时在 stderr 打印进度,最后一行汇总。
 - **`--quiet` / `-q`**:抑制所有非错误输出。错误仍到 stderr,exit code 不变(批量有失败仍为 2)。
-- **`--output` 与 `--quiet` 正交**:`--quiet --json -o result.json batch\` 会把 JSON 写到文件,stdout 完全干净。
+- **`--output` 与 `--quiet` 正交**:`--quiet --json -o result.json --dir batch\` 会把 JSON 写到文件,stdout 完全干净。
 
 ## 输出结构(JSON)
 
@@ -185,6 +189,7 @@ win_ocr_cli --from-clipboard -k "订单号"
 |---|---|---|
 | 识别引擎 | Apple Vision (`VNRecognizeTextRequest`) | Windows.Media.Ocr (`OcrEngine`) |
 | 引擎语言 | 多语言并行 (reviseLanguages) | 单语言 (按 `--lang` 第一个;失败回落) |
+| 识别等级 / 语言纠错 | `recognitionLevel` / 自动纠错 | 不支持(`--level` / `--no-correction` 为兼容保留,但不生效) |
 | 单行置信度 | 有(`bestCandidate.confidence`) | 无(固定 `1.0`) |
 | 图片格式 | PNG / JPEG / HEIC / TIFF / GIF / WebP / PDF | PNG / JPEG / BMP / GIF / TIFF |
 | 截图 | `CGDisplayCreateImage` / `CGWindowListCreateImage` | `Graphics.CopyFromScreen` / `PrintWindow` |
@@ -195,7 +200,7 @@ win_ocr_cli --from-clipboard -k "订单号"
 
 ## 实现要点
 
-- **WinRT 投影**:`.NET Framework 4.0` 的 csc.exe 不内置 WinRT 投影。我们引用
+- **WinRT 投影**:`.NET Framework 4.5` 的 csc.exe 不内置 WinRT 投影。我们引用
   `C:\Windows\Microsoft.NET\Framework\v4.0.30319\System.Runtime.WindowsRuntime.dll` +
   Windows SDK 10.0.22621.0 的合并 `Windows.winmd`,直接使用 `Windows.Media.Ocr.OcrEngine`、
   `Windows.Graphics.Imaging.SoftwareBitmap` 等强类型 API;WinRT 异步操作用
@@ -215,5 +220,5 @@ win_ocr_cli --from-clipboard -k "订单号"
 零运行时依赖 —— 仅使用系统内置的 .NET Framework + Windows Runtime:
 
 - `System.dll`, `System.Core.dll`, `System.Drawing.dll`, `System.Windows.Forms.dll`
-- `System.Runtime.WindowsRuntime.dll`(.NET 4.0 自带,提供 WinRT 投影)
+- `System.Runtime.WindowsRuntime.dll`(.NET 4.5+ 自带,提供 WinRT 投影)
 - `Windows.winmd`(Windows SDK 10.0.22621.0,合并所有 WinRT 类型元数据)
