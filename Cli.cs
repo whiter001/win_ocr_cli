@@ -46,6 +46,8 @@ namespace WinOcrCli
         public CaptureSpec ClipboardCapture;                    // --clipboard(把截图写到剪贴板)
         public bool PasteboardSource = false;                   // --from-clipboard
         public bool InstallSkill = false;                       // --install-skill
+        public bool Install = false;                            // --install
+        public string InstallDir;                               // --install-dir,默认 ~/bin
     }
 
     /// <summary>截图规格(主屏/按窗口/按区域)。</summary>
@@ -96,6 +98,8 @@ namespace WinOcrCli
             bool clipboardRequested = false;
             bool pasteboardRequested = false;
             bool installSkillRequested = false;
+            bool installRequested = false;
+            string installDir = null;
             CaptureSpec captureSource = null;
 
             for (int i = 0; i < args.Length; i++)
@@ -250,6 +254,16 @@ namespace WinOcrCli
                         installSkillRequested = true;
                         break;
 
+                    case "--install":
+                        installRequested = true;
+                        break;
+
+                    case "--install-dir":
+                        i++;
+                        if (i >= args.Length) throw new CliException("--install-dir 需要一个目录路径");
+                        installDir = args[i];
+                        break;
+
                     default:
                         if (a == "-")
                         {
@@ -274,16 +288,24 @@ namespace WinOcrCli
 
             // ----- 模式互斥与组装 -----
 
-            if (installSkillRequested)
+            if (installDir != null && !installRequested)
+                throw new CliException("--install-dir 只能与 --install 一起使用");
+
+            if (installRequested && installSkillRequested)
+                throw new CliException("--install 与 --install-skill 不能同时使用,请分两步执行");
+
+            if (installRequested || installSkillRequested)
             {
                 if (captureSource != null || saveScreenshotPath != null
                     || windowListRequested || clipboardRequested || pasteboardRequested
                     || imagePaths.Count > 0 || inputDirs.Count > 0)
                 {
-                    throw new CliException("--install-skill 必须单独使用,不能与其他输入或截图参数组合");
+                    throw new CliException("--install / --install-skill 必须单独使用,不能与其他输入或截图参数组合");
                 }
                 if (opts.OutputPath != null) opts.OutputMode = CliOutputMode.Json;
-                opts.InstallSkill = true;
+                opts.Install = installRequested;
+                opts.InstallDir = installDir;
+                opts.InstallSkill = installSkillRequested;
                 return opts;
             }
 
@@ -490,6 +512,7 @@ namespace WinOcrCli
                 sb.AppendLine("  win_ocr_cli --from-clipboard [选项]              # 识别剪贴板里的图片");
                 sb.AppendLine("  win_ocr_cli --window-list                        # 列出可见窗口(不能与其他输入同用)");
                 sb.AppendLine("  win_ocr_cli --install-skill                      # 安装全局 Agent Skill(必须单独使用)");
+                sb.AppendLine("  win_ocr_cli --install [--install-dir <目录>]      # 安装到全局目录(默认 ~/bin)并确保在 PATH 中");
                 sb.AppendLine();
                 sb.AppendLine("输入源(仅可选其一,不可叠加):");
                 sb.AppendLine("  <位置参数>...          一张或多张图片路径");
@@ -525,6 +548,8 @@ namespace WinOcrCli
                 sb.AppendLine("    Add-WindowsCapability -Online -Name \"Language.OCR~~~und-LANG~0.0.1.0\"");
                 sb.AppendLine("  默认语言跟随用户配置文件;--lang 仅在 OcrEngine 支持时生效。");
                 sb.AppendLine("  --install-skill 把 SKILL.md 写入 %USERPROFILE%\\.agents\\skills\\win-ocr-cli\\");
+                sb.AppendLine("  --install 把当前 exe 复制到 %USERPROFILE%\\bin\\,并确保该目录在用户 PATH 中");
+                sb.AppendLine("  --install-dir <目录> 覆盖 --install 的目标目录(默认 %USERPROFILE%\\bin)");
                 sb.AppendLine();
                 sb.AppendLine("退出码:");
                 sb.AppendLine("  0 成功   1 参数/运行错误   2 批量模式有失败项");
@@ -539,6 +564,8 @@ namespace WinOcrCli
                 sb.AppendLine("  win_ocr_cli --window-list");
                 sb.AppendLine("  win_ocr_cli --clipboard");
                 sb.AppendLine("  win_ocr_cli --from-clipboard");
+                sb.AppendLine("  win_ocr_cli --install");
+                sb.AppendLine("  win_ocr_cli --install-skill");
                 return sb.ToString();
             }
         }

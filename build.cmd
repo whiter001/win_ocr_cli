@@ -13,11 +13,29 @@ setlocal
 
 set CSC="C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe"
 set OUT=bin\win_ocr_cli.exe
-set WINRT=C:\PROGRA~2\Windows Kits\10\UnionMetadata\10.0.22621.0
+
+REM ---- 定位合并 WinMD(包含 Windows.winmd 的目录)----
+REM 探测顺序:
+REM   1) 环境变量 WINRT_OVERRIDE —— 直接指定目录
+REM   2) %LOCALAPPDATA%\winmd\UnionMetadata\<版本>\  —— 免安装 SDK 的本地缓存
+REM   3) C:\Program Files (x86)\Windows Kits\10\UnionMetadata\<版本>\  —— 官方 SDK
+set WINRT=
+if defined WINRT_OVERRIDE set WINRT=%WINRT_OVERRIDE%
+if not defined WINRT for /d %%D in ("%LOCALAPPDATA%\winmd\UnionMetadata\*") do if exist "%%~fD\Windows.winmd" set WINRT=%%~fD
+if not defined WINRT for /d %%D in ("C:\Program Files (x86)\Windows Kits\10\UnionMetadata\*") do if exist "%%~fD\Windows.winmd" set WINRT=%%~fD
+if not defined WINRT for /d %%D in ("C:\Program Files\Windows Kits\10\UnionMetadata\*") do if exist "%%~fD\Windows.winmd" set WINRT=%%~fD
+
+if not defined WINRT (
+    echo *** 找不到 Windows.winmd ***
+    echo 请安装 Windows SDK 10.0.22621.0 ^(https://developer.microsoft.com/windows/downloads/windows-sdk/^),
+    echo 或把合并 WinMD 放到 %%LOCALAPPDATA%%\winmd\UnionMetadata\<版本>\Windows.winmd,
+    echo 或设置环境变量 WINRT_OVERRIDE 指向包含 Windows.winmd 的目录。
+    exit /b 1
+)
 
 if not exist bin mkdir bin
 
-echo === Compiling win_ocr_cli ===
+echo === Compiling win_ocr_cli (WinMD: %WINRT%) ===
 %CSC% /nologo /target:exe /platform:anycpu /out:%OUT% ^
     /reference:System.dll ^
     /reference:System.Core.dll ^
@@ -27,7 +45,7 @@ echo === Compiling win_ocr_cli ===
     /reference:System.Runtime.WindowsRuntime.dll ^
     /reference:mscorlib.dll ^
     /reference:"%WINRT%\Windows.winmd" ^
-    OcrTypes.cs Cli.cs ImageLoader.cs OcrEngine.cs ScreenCapture.cs ClipboardHelper.cs OutputRenderer.cs SkillInstaller.cs Program.cs
+    OcrTypes.cs Cli.cs ImageLoader.cs OcrEngine.cs ScreenCapture.cs ClipboardHelper.cs OutputRenderer.cs SkillInstaller.cs SelfInstaller.cs Program.cs
 
 if %ERRORLEVEL% NEQ 0 (
     echo *** Build FAILED ***

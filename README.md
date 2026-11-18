@@ -4,7 +4,7 @@
 [mac_ocr_cli](https://github.com/whiter001/mac_ocr_cli) 的 Windows 移植版,使用
 `C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe` (C# 5 / .NET Framework 4.5+) 编译。
 
-零运行时依赖 —— 链接到系统内置的 Windows Runtime,产物为单文件 45 KB exe。
+零运行时依赖 —— 链接到系统内置的 Windows Runtime,产物为单文件 ~56 KB exe。
 
 ## 功能
 
@@ -17,13 +17,14 @@
 - **批量**:多张图片、目录递归扫描、stdin 路径列表,并发处理,单张失败不影响其他
 - **屏幕截图**:截主屏幕、按窗口标题/ID 截、截屏幕区域;另含 `--window-list` 列出可见窗口
 - **剪贴板**:截图到剪贴板(`--clipboard`)、识别剪贴板里的图片(`--from-clipboard`)
+- **全局安装**:`--install` 把 exe 复制到 `~/bin` 并确保该目录在用户 PATH 中,之后任意目录可直接运行 `win_ocr_cli`
 - **Agent Skill**:`--install-skill` 把 SKILL.md 安装到全局 skills 目录(`%USERPROFILE%\.agents\skills\win-ocr-cli\`)
 - **进度** + **`--quiet`**:批量模式默认在 stderr 打印每张完成进度,`--quiet` 抑制所有非错误输出
 
 ## 编译
 
 需要 **Windows 10 或更高版本** + **.NET Framework 4.5+**(已自带在 Win 10/11)。
-还需本机已安装 **Windows SDK 10.0.22621.0** 的合并 WinMD(`Windows.winmd`)。
+还需本机有 **合并 WinMD**(`Windows.winmd`,包含全部 WinRT 类型)。
 
 直接运行 `build.cmd`:
 
@@ -31,12 +32,31 @@
 build.cmd
 ```
 
-输出 `bin\win_ocr_cli.exe`(单文件 45 KB)。
+输出 `bin\win_ocr_cli.exe`(单文件 ~56 KB)。
 
-如果 SDK 路径不同,修改 `build.cmd` 里的 `WINRT` 变量;找不到 SDK 时,可以从
-`C:\Windows\System32\WinMetadata\` 下分别引用 `Windows.Foundation.winmd` /
-`Windows.Media.winmd` / `Windows.Graphics.winmd` / `Windows.Globalization.winmd` /
-`Windows.Storage.winmd` 代替合并的 `Windows.winmd`,但合并 WinMD 更简单。
+### 合并 WinMD 的位置
+
+`build.cmd` 会按以下顺序自动探测(第一个命中的即被使用):
+
+1. 环境变量 `WINRT_OVERRIDE` —— 指向包含 `Windows.winmd` 的目录
+2. `%LOCALAPPDATA%\winmd\UnionMetadata\<版本>\` —— 免安装 SDK 的本地缓存(见下)
+3. `C:\Program Files (x86)\Windows Kits\10\UnionMetadata\<版本>\` —— 官方 SDK 默认位置
+4. `C:\Program Files\Windows Kits\10\UnionMetadata\<版本>\`
+
+找不到时 `build.cmd` 会提示安装 Windows SDK。
+
+**免安装 SDK**(无需管理员权限,本机没装 Windows SDK 时用):
+
+```powershell
+# NuGet 包里带合并 WinMD,解压后把 Windows.winmd 放到探测路径即可
+$ver = '10.0.22621.756'
+Invoke-WebRequest "https://api.nuget.org/v3-flatcontainer/microsoft.windows.sdk.cpp/$ver/microsoft.windows.sdk.cpp.$ver.nupkg" -OutFile sdkcpp.zip
+Expand-Archive sdkcpp.zip -DestinationPath sdkcpp
+Copy-Item "sdkcpp\c\UnionMetadata\10.0.22621.0\Windows.winmd" "$env:LOCALAPPDATA\winmd\UnionMetadata\10.0.22621.0\"
+```
+
+注意:`C:\Windows\System32\WinMetadata\` 下是**分体** winmd,不能替代合并版
+(`System.Runtime.WindowsRuntime.dll` 要求引用程序集 `Windows`)。
 
 ## 安装(从 release)
 
@@ -50,6 +70,29 @@ Move-Item win_ocr_cli.exe $env:LOCALAPPDATA\Microsoft\WindowsApps\
 # 验证
 win_ocr_cli --version
 ```
+
+## 全局安装(本仓库 build 之后)
+
+```powershell
+# 编译
+.\build.cmd
+
+# 安装到 ~/bin(= %USERPROFILE%\bin),并确保该目录在用户 PATH 中
+.\bin\win_ocr_cli.exe --install
+
+# 验证(新开终端后任意目录可用)
+win_ocr_cli --version
+```
+
+- `--install` 默认目标是 `~/bin`;`--install-dir <目录>` 可指定其它目录。
+- 目标目录已在用户 PATH 中时不会重复写入;不在时自动追加到用户 PATH
+  (HKCU\Environment)并广播 `WM_SETTINGCHANGE`,新开的终端立即生效。
+- 目标 exe 正在运行时不能直接覆盖,会先改名再替换,旧文件若被占用则保留为
+  `win_ocr_cli.exe.old`,进程退出后可自行删除。
+- 可重复执行(幂等):已是目标文件时只校验、不复制。
+- `--install` 与 `--install-skill` 互斥,分两步执行。
+- 卸载:删除 `~/bin\win_ocr_cli.exe` 即可;若该目录是被 `--install` 追加进 PATH 的,
+  记得从用户 PATH 中移除。
 
 ## OCR 语言包
 
@@ -132,6 +175,9 @@ win_ocr_cli --from-clipboard -k "订单号"
 
 # 安装全局 Agent Skill(让 AI Agent 自动发现本工具的用法)
 win_ocr_cli --install-skill
+
+# 安装到全局目录 ~/bin(并确保在 PATH 中)
+win_ocr_cli --install
 ```
 
 ## 进度与静默
@@ -195,14 +241,15 @@ win_ocr_cli --install-skill
 | 截图 | `CGDisplayCreateImage` / `CGWindowListCreateImage` | `Graphics.CopyFromScreen` / `PrintWindow` |
 | 坐标原点在输出时 | 左下(Vision 原生) | 左下(本工具从 Windows 的左上翻转) |
 | 编译器 | Swift 5.9+ / Xcode 15+ | csc.exe v4.0.30319(C# 5 / .NET 4.0) |
-| 产物大小 | ~ | 45 KB 单 exe |
+| 产物大小 | ~ | ~56 KB 单 exe |
 | 系统要求 | macOS 13+ | Windows 10+ |
 
 ## 实现要点
 
 - **WinRT 投影**:`.NET Framework 4.5` 的 csc.exe 不内置 WinRT 投影。我们引用
   `C:\Windows\Microsoft.NET\Framework\v4.0.30319\System.Runtime.WindowsRuntime.dll` +
-  Windows SDK 10.0.22621.0 的合并 `Windows.winmd`,直接使用 `Windows.Media.Ocr.OcrEngine`、
+  合并 `Windows.winmd`(位置由 `build.cmd` 自动探测,见「编译」一节),直接使用
+  `Windows.Media.Ocr.OcrEngine`、
   `Windows.Graphics.Imaging.SoftwareBitmap` 等强类型 API;WinRT 异步操作用
   `WindowsRuntimeSystemExtensions.AsTask(IAsyncOperation<T>)` 同步化。
 - **图像解码**:`System.Drawing.Bitmap` 加载 GDI+ 支持的图片,编码为 PNG 字节,
@@ -211,6 +258,9 @@ win_ocr_cli --install-skill
 - **图像坐标**:OcrLine 没有自己的 BoundingBox,我们用所有 OcrWord.BoundingRect 的
   并集作为行框;再把 Windows 的「左上原点 + 像素」转换为「左下原点 + [0,1] 归一化」。
 - **JSON 序列化**:手写 `JsonWriter`(C# 5 没有 `System.Text.Json`)。
+- **全局安装**:`--install` 取 `Assembly.GetExecutingAssembly().Location` 作为源,
+  复制到目标目录;目标正在运行时先改名再替换;用户 PATH 走 `HKCU\Environment`
+  注册表项(保留原值类型),并广播 `WM_SETTINGCHANGE` 让新终端立即可见。
 - **截图**:`Graphics.CopyFromScreen` 截主屏 / 区域;`user32!PrintWindow` + DWM
   合成标志(0x2)截窗口。窗口列表用 `EnumWindows` + `GetWindowText` + 进程名。
 - **并发**:批量模式用 `Task.Run` + `SemaphoreSlim`,并发上限 = `min(4, 核数)`,与 macOS 版一致。
@@ -221,4 +271,4 @@ win_ocr_cli --install-skill
 
 - `System.dll`, `System.Core.dll`, `System.Drawing.dll`, `System.Windows.Forms.dll`
 - `System.Runtime.WindowsRuntime.dll`(.NET 4.5+ 自带,提供 WinRT 投影)
-- `Windows.winmd`(Windows SDK 10.0.22621.0,合并所有 WinRT 类型元数据)
+- `Windows.winmd`(合并 WinMD,合并所有 WinRT 类型元数据;位置见「编译」一节)

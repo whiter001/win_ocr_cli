@@ -66,6 +66,7 @@ namespace WinOcrCli
         {
             // 优先级:install-skill > window-list > clipboard > pasteboard > capture > file
             if (opts.InstallSkill) return RunInstallSkill(opts);
+            if (opts.Install) return RunInstall(opts);
             if (opts.WindowList) return RunWindowList(opts);
             if (opts.ClipboardCapture != null) return RunClipboardCapture(opts, opts.ClipboardCapture);
             if (opts.PasteboardSource) return RunPasteboardOcr(opts);
@@ -110,6 +111,46 @@ namespace WinOcrCli
                 Console.Error.WriteLine("错误: " + ex.Message);
                 return 1;
             }
+        }
+
+        // ---------- 安装到全局目录(~/bin) ----------
+
+        private static int RunInstall(CliOptions opts)
+        {
+            try
+            {
+                var result = SelfInstaller.Install(opts.InstallDir);
+                string payload = (opts.OutputMode == CliOutputMode.Json)
+                    ? OutputRenderer.RenderInstallJson(result)
+                    : RenderInstallText(result);
+                Emit(payload, opts.OutputPath, opts.Quiet);
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("错误: " + ex.Message);
+                return 1;
+            }
+        }
+
+        private static string RenderInstallText(InstallResult r)
+        {
+            var sb = new StringBuilder();
+            sb.Append(r.Copied ? "已安装到全局目录: " : "已在全局目录(无需复制): ");
+            sb.AppendLine(r.ExecutablePath);
+            sb.AppendLine("来源: " + r.SourcePath);
+            sb.AppendLine(string.Format("大小: {0} 字节", r.SizeBytes));
+            if (r.PathUpdated)
+            {
+                sb.AppendLine("PATH: 已把该目录追加到用户 PATH,新开终端后生效");
+            }
+            else
+            {
+                sb.AppendLine("PATH: 该目录已在用户 PATH 中,新开终端即可直接运行 `win_ocr_cli`");
+            }
+            if (!string.IsNullOrEmpty(r.LeftoverPath))
+                sb.AppendLine("提示: 旧文件被运行中的进程占用,已保留在 " + r.LeftoverPath + "(可在进程退出后删除)");
+            return sb.ToString();
         }
 
         // ---------- 截图到剪贴板 ----------

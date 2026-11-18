@@ -269,6 +269,24 @@ namespace WinOcrCli
             return w.ToString();
         }
 
+        public static string RenderInstallJson(InstallResult r)
+        {
+            var w = new JsonWriter();
+            w.BeginObject();
+            w.Key("installed"); w.Bool(true);
+            w.Key("executable"); w.String(r.ExecutablePath);
+            w.Key("targetDir"); w.String(r.TargetDir);
+            w.Key("source"); w.String(r.SourcePath);
+            w.Key("copied"); w.Bool(r.Copied);
+            w.Key("sizeBytes"); w.Int((int)r.SizeBytes);
+            w.Key("pathAlreadyPresent"); w.Bool(r.PathAlreadyPresent);
+            w.Key("pathUpdated"); w.Bool(r.PathUpdated);
+            w.Key("leftoverPath");
+            if (r.LeftoverPath != null) w.String(r.LeftoverPath); else w.Null();
+            w.EndObject();
+            return w.ToString();
+        }
+
         private static void WriteBoundingBox(JsonWriter w, OcrBoundingBox b)
         {
             w.BeginObject();
